@@ -1,0 +1,636 @@
+---
+title:  HR_Analytics_Data_analysis_report
+author:
+  - name: "Josiane BYUKUSENGE"
+    affiliation: "Junior Data Analyst"
+
+date: "2025-06-29"
+format: 
+  html:
+    page-layout: full
+    self-contained: true
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    number-sections: true
+    number-tables: true
+    toc: true
+    toc-location: left
+    toc-title: Contents
+jupyter: python3
+---
+
+
+This notebook walks through the performing exploratory data analysis (EDA). The goal is to extract useful insights from key HR_Analytics metrics.
+
+
+### 📦 Importing Required Libraries
+
+- import pandas as pd  
+  This imports the pandas library, which is a powerful tool for data manipulation and analysis.  
+  The alias pd is commonly used for easier reference in code.
+
+- import os
+  This imports Python's built-in os module, which provides functions to interact with the operating system.  
+  It's useful for tasks like reading/writing files, navigating directories, and checking file paths.
+
+- import plotly.express as px  
+  This imports Plotly Express, a high-level interface for creating interactive plots and charts.  
+  The alias px lets you easily create visualizations like scatter plots, bar charts, and line graphs with minimal code.
+
+ - scipy.stats.chi2_contingency (from scipy.stats import chi2_contingency) is a statistical function used to perform the Chi-Square Test of Independence, helping determine whether there is a significant association between two categorical variables.scipy.stats.chi2_contingency (from scipy.stats import chi2_contingency) is a statistical function used to perform the Chi-Square Test of Independence, helping determine whether there is a significant association between two categorical variables.
+
+ - ttest_ind from scipy.stats is a statistical function used to perform an independent two-sample t-test, which compares the means of two independent groups to determine whether there is a statistically significant difference between them.
+
+ - numpy (import numpy as np) is a fundamental library for numerical computations in Python, offering fast and efficient operations on arrays and mathematical functions, and is often used to support statistical calculations such as effect sizes and standardized values.
+
+```{python}
+import pandas as pd
+import os
+import plotly.express as px
+from scipy.stats import chi2_contingency
+from scipy.stats import ttest_ind
+import numpy as np
+from scipy.stats import shapiro
+```
+
+```{python}
+#get working directory
+current_dir = os.getcwd()
+
+# Go one directory up to the root directory
+project_root_dir = os.path.dirname(current_dir)
+
+#define paths to the data folders
+data_dir = os.path.join(project_root_dir,'data')
+raw_dir = os.path.join(data_dir,'raw')
+processed_dir = os.path.join(data_dir,'processed') 
+
+# define path results folder 
+results_dir = os.path.join(project_root_dir,'results')
+
+# define paths to docs folder
+docs_dir = os.path.join(project_root_dir,'docs')
+
+# Create directories if they do not exit
+os.makedirs(raw_dir, exist_ok = True) 
+os.makedirs(processed_dir, exist_ok = True) 
+os.makedirs(results_dir, exist_ok = True)
+os.makedirs(docs_dir, exist_ok = True)
+```
+::: {.panel-tabset}
+## Output {.active}
+```{python}
+#| label: HR_Analytics
+#| tbl-cap: HR_Analytics Dataset
+
+HR_Analytics= pd.read_csv('Cleaned1.csv')
+HR_Analytics.head()
+```
+## Code
+
+```{python}
+#| output: false
+HR_Analytics= pd.read_csv('Cleaned1.csv')
+```
+
+:::
+
+```{python}
+#| echo: false
+#| output: false
+HR_Analytics.shape
+```
+
+```{python}
+#| echo: false
+#| output: false
+HR_Analytics.info()
+```
+
+```{python}
+HR_Analytics.describe()
+```
+
+## Visualizing Attrition by Job Role
+
+```{python}
+attrition_by_role = HR_Analytics.groupby(['JobRole', 'Attrition']).size().reset_index(name='count')
+total_per_role = attrition_by_role.groupby('JobRole')['count'].transform('sum')
+attrition_by_role['percentage'] = round((attrition_by_role['count'] / total_per_role) * 100, 2)
+
+# Plot
+fig = px.bar(attrition_by_role,
+             x='JobRole',
+             y='percentage',
+             color='Attrition',
+            # title='Attrition by Job Role (%)',
+             color_discrete_sequence=px.colors.qualitative.Set2,  
+             barmode='group',
+             text='percentage',
+             width=1100,
+             height=500)
+
+fig.update_layout(
+    template="presentation",
+    xaxis_title='Job Role',
+    yaxis_title='Attrition Percentage',
+    xaxis_tickangle=25,               
+    xaxis_tickfont=dict(size=11),     
+    legend_title=dict(text='Attrition'),
+    margin=dict(l=400, r=50, t=50, b=100),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)"
+)
+
+fig.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+fig.show()
+
+# Save the chart
+#fig.write_image(os.path.join(results_dir, 'attrition_by_jobrole.jpg'))
+#fig.write_image(os.path.join(results_dir, 'attrition_by_jobrole.png'))
+fig.write_html(os.path.join(results_dir,   'attrition_by_jobrole.html'))
+```
+
+- Prepare Data
+firstly, extract the percentages of "Yes" attrition across job roles into a format I can analyze
+
+```{python}
+
+# Prepare data again
+attrition_by_role = HR_Analytics.groupby(['JobRole', 'Attrition']).size().reset_index(name='count')
+total_per_role = attrition_by_role.groupby('JobRole')['count'].transform('sum')
+attrition_by_role['percentage'] = round((attrition_by_role['count'] / total_per_role) * 100, 2)
+
+# Focus only on 'Yes' attrition to compare percentage by role
+attrition_yes = attrition_by_role[attrition_by_role['Attrition'] == 'Yes'].copy()
+```
+
+- Test for Normality (Shapiro-Wilk)
+I use the Shapiro-Wilk test to check normality of attrition percentages
+
+```{python}
+from scipy.stats import shapiro
+# Check normality for attrition percentages
+stat, p_value = shapiro(attrition_yes['percentage'])
+
+print("Shapiro-Wilk Test for Normality")
+print(f"Statistic: {stat:.4f}, p-value: {p_value:.4f}")
+```
+
+The Shapiro-Wilk test shows a p-value of 0.3134, which is above 0.05, indicating the data is normally distributed. This means it’s appropriate to use parametric tests for analysis.
+
+- Chi-Square Test of Independence: Attrition by Job Role
+
+To determine whether attrition status is related to job role, we performed a Chi-Square Test of Independence.
+
+```{python}
+# Create a contingency table of JobRole vs Attrition
+contingency_table = pd.crosstab(HR_Analytics['JobRole'], HR_Analytics['Attrition'])
+
+print("Contingency Table:")
+print(contingency_table)
+
+# Perform Chi-Square Test
+chi2, p_value, dof, expected = chi2_contingency(contingency_table)
+
+print("\nChi-Square Test of Independence")
+print(f"Chi2 Statistic: {chi2:.4f}")
+print(f"Degrees of Freedom: {dof}")
+print(f"p-value: {p_value:.4f}")
+
+if p_value < 0.05:
+    print(" Significant relationship between Job Role and Attrition (reject null hypothesis).")
+else:
+    print(" No significant relationship between Job Role and Attrition (fail to reject null hypothesis).")
+```
+
+# Contingency Table
+This table summarizes how many employees in each job role either left ("Yes") or stayed ("No").
+
+so, p-value < 0.05  We reject the null hypothesis, job role and attrition are significantly related.
+
+- The correct statistical approach (Chi-Square Test) was used to determine the relationship between job role and attrition. The results should now guide decisions related to workforce retention strategies, focusing on specific roles if the relationship is found to be significant.
+
+- Check if there is any correlation
+
+```{python}
+from scipy.stats import shapiro, spearmanr
+# Correlation between percentage and job role
+attrition_yes['JobRole_Code'] = attrition_yes['JobRole'].astype('category').cat.codes
+corr_coef, corr_p = spearmanr(attrition_yes['percentage'], attrition_yes['JobRole_Code'])
+
+print("\nCorrelation Analysis (Spearman)")
+print(f"Correlation coefficient: {corr_coef:.4f}, p-value: {corr_p:.4f}")
+
+if corr_p < 0.05:
+    print("Significant correlation exists between job role and attrition percentage.")
+else:
+    print("No significant correlation between job role and attrition percentage.")
+```
+
+
+# Correlation Analysis
+We encoded job roles numerically and computed Spearman correlation with attrition percentage
+
+- Spearman's ρ (rho) is used as it captures monotonic relationships.
+- A significant p-value (< 0.05) indicates a meaningful correlation.
+
+# Recommendation 
+Attrition by Job role
+Focus on reducing employees attrition in roles like sales representatives and Labaratory Technicians, where attrition is high by understanding why people are leaving like are they satisfied, how their worklife balance and compensation like monthly income for them are enough? After that take action based on those findings use targeted solutions like training, flexible hours and bonuses tailored to that role.
+
+## Visualizing Attrition by Age Group
+
+```{python}
+attrition_by_age = HR_Analytics.groupby(['AgeGroup', 'Attrition']).size().reset_index(name='count')
+total_per_age = attrition_by_age.groupby('AgeGroup')['count'].transform('sum')
+attrition_by_age['percentage'] = round((attrition_by_age['count'] / total_per_age) * 100, 2)
+
+fig = px.bar(attrition_by_age,
+             x='AgeGroup',
+             y='percentage',
+             color='Attrition',
+             #title='Attrition by Age Group (%)',
+             color_discrete_sequence=["#4dd0e1", "#00695c"],
+             barmode='group',
+             text='percentage',
+             width=1000,
+             height=600)
+
+fig.update_layout(template="presentation",
+                  xaxis_title='Age Group',
+                  yaxis_title='Attrition Percentage',
+                  legend_title=dict(text='Attrition'),
+                  margin=dict(l=400, r=50, t=50, b=50),
+                  paper_bgcolor="rgba(0,0,0,0)",
+                  plot_bgcolor="rgba(0,0,0,0)")
+
+fig.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+fig.show()
+
+#fig.write_image(os.path.join(results_dir, 'attrition_by_age.jpg'))
+#fig.write_image(os.path.join(results_dir, 'attrition_by_age.png'))
+fig.write_html(os.path.join(results_dir, 'attrition_by_age.html'))
+```
+
+```{python}
+# Grouping and Percentage Calculation
+attrition_by_age = HR_Analytics.groupby(['AgeGroup', 'Attrition']).size().reset_index(name='count')
+total_per_age = attrition_by_age.groupby('AgeGroup')['count'].transform('sum')
+attrition_by_age['percentage'] = round((attrition_by_age['count'] / total_per_age) * 100, 2)
+```
+
+```{python}
+# Normality Test for Attrition = Yes vs No ###
+yes_data = attrition_by_age[attrition_by_age['Attrition'] == 'Yes']['percentage']
+no_data = attrition_by_age[attrition_by_age['Attrition'] == 'No']['percentage']
+```
+
+```{python}
+from scipy.stats import shapiro
+# Shapiro-Wilk Test (normality)
+stat_yes, p_yes = shapiro(yes_data)
+stat_no, p_no = shapiro(no_data)
+
+print("🔍 Shapiro-Wilk Test Results:")
+print(f"Attrition = Yes: stat = {stat_yes:.4f}, p = {p_yes:.4f}")
+print(f"Attrition = No : stat = {stat_no:.4f}, p = {p_no:.4f}")
+```
+
+The Shapiro-Wilk test results show p-values greater than 0.05 for both groups (Attrition = Yes and No), indicating the data in each group is normally distributed. The test statistics are the same (0.8723), supporting this conclusion. Therefore, parametric tests can be used for further analysis.
+
+- test_used = "Independent T-test
+
+```{python}
+
+# Independent T-Test (parametric)
+t_stat, p_val = ttest_ind(yes_data, no_data)
+
+print("Independent T-test Results:")
+print(f"Test Statistic = {t_stat:.4f}")
+print(f"p-value = {p_val:.4f}")
+
+# Interpretation
+if p_val < 0.05:
+    print("There is a statistically significant difference in attrition percentages between 'Yes' and 'No' groups.")
+else:
+    print(" No statistically significant difference found in attrition percentages between the two groups.")
+```
+
+I ran an independent T-test comparing attrition percentages between employees who left (Attrition = Yes) and those who stayed (Attrition = No) across age groups.
+
+- The test statistic (-9.5245) is a large negative number, indicating that the mean attrition percentage for one group is significantly lower than the other.
+
+- The p-value is 0.0000, which is less than 0.05, meaning the difference is statistically significant.
+
+- We reject the null hypothesis and conclude that attrition percentage differs significantly between the two groups (Yes vs. No) across age groups.
+
+  Recommendation
+
+ Attrition by Age group 
+Since we found younger employees Are more likely to leave, I recommend them to design retention strategies specifically for them like flexible work options,Accelerated development paths. These help address the needs and expectations of younger employees making them more likely to stay.
+
+## Visualizing Attrition by Department
+
+```{python}
+# Step 1: Group by Department and Attrition, and count
+dept_attrition = HR_Analytics.groupby(['Department', 'Attrition']).size().reset_index(name='count')
+
+# Step 2: Filter for only employees who left (Attrition == "Yes")
+attrition_yes = dept_attrition[dept_attrition['Attrition'] == 'Yes'].copy()
+
+# Step 3: Compute percentage of attrition by department
+total_attrition = attrition_yes['count'].sum()
+attrition_yes['percentage'] = round((attrition_yes['count'] / total_attrition) * 100, 2)
+
+# Step 4: Create pie chart
+fig = px.pie(attrition_yes,
+             names='Department',
+             values='percentage',
+             #title='Attrition Distribution by Department (Only "Yes")',
+             color_discrete_sequence=px.colors.qualitative.Set3,
+             hole=0.4)  # donut-style
+
+# Step 5: Styling
+fig.update_traces(
+    textinfo='percent+label',
+    pull=[0.05] * len(attrition_yes),
+    marker=dict(line=dict(color='white', width=2))
+)
+
+fig.update_layout(
+    template="presentation",
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    width=1000,
+    height=600
+)
+
+# Step 6: Show and save
+fig.show()
+
+results_dir = 'results'
+os.makedirs(results_dir, exist_ok=True)
+
+#fig.write_image(os.path.join(results_dir, 'attrition_by_department_pie.jpg'))
+#fig.write_image(os.path.join(results_dir, 'attrition_by_department_pie.png'))
+fig.write_html(os.path.join(results_dir, 'attrition_by_department_pie.html'))
+```
+
+```{python}
+from scipy.stats import shapiro
+# Step 1: Test Normality of attrition percentages across departments using Shapiro-Wilk test
+print("Normality Test (Shapiro-Wilk) for Attrition Percentage by Department:")
+
+stat, p_value = shapiro(attrition_yes['percentage'])
+print(f"Test Statistic = {stat:.4f}, p-value = {p_value:.4f}")
+
+if p_value > 0.05:
+    print("Data appears to be normally distributed. Use parametric tests.\n")
+else:
+    print("Data is NOT normally distributed. Use non-parametric tests.\n")
+```
+
+This result means that the percentages of attrition by department follow a normal distribution. The p-value is 0.3134, which is greater than 0.05, so we do not reject the assumption of normality. Because the data looks normally distributed, it’s appropriate to use parametric tests (like t-tests or ANOVA) for further analysis.
+
+```{python}
+# Let's create contingency table for Dept vs Attrition (Yes/No) for correlation test
+contingency_table = pd.crosstab(HR_Analytics['Department'], HR_Analytics['Attrition'])
+
+print("Contingency Table (Department vs Attrition):")
+print(contingency_table)
+
+# Chi-Square test for independence between Department and Attrition
+chi2, p_chi, dof, expected = chi2_contingency(contingency_table)
+
+print(f"\nChi-Square Test for Independence between Department and Attrition:")
+print(f"Chi2 Statistic = {chi2:.4f}, p-value = {p_chi:.4f}")
+
+if p_chi < 0.05:
+    print("There is a significant association between Department and Attrition.\n")
+else:
+    print("No significant association between Department and Attrition.\n")
+```
+
+This table displays the number of employees who remained (No) and those who left (Yes) within each department. The Chi-square test indicates a significant relationship between department and attrition, as the p-value (0.0045) is below 0.05. This suggests that employee attrition rates vary across different departments.
+
+```{python}
+# Step 4: Correlation between Department and Attrition?
+# Since Department is categorical, and Attrition is categorical, correlation can be measured by Cramér's V
+def cramers_v(confusion_matrix):
+    chi2 = chi2_contingency(confusion_matrix)[0]
+    n = confusion_matrix.sum().sum()
+    r, k = confusion_matrix.shape
+    return np.sqrt(chi2 / (n * (min(k-1, r-1))))
+
+cramers_v_value = cramers_v(contingency_table)
+print(f"Cramér's V (measure of association strength) = {cramers_v_value:.4f}")
+```
+
+- Recommendation 
+
+The analysis shows that department does affect attrition, as indicated by a statistically significant association (p = 0.0045), but the effect is weak (Cramér’s V = 0.0856). This means that while department plays a role, it is not the main driver of employee turnover. Therefore, this finding should serve as a starting point for deeper analysis—such as examining job roles within departments, evaluating employee satisfaction, work-life balance, or performance levels. It’s also advisable to focus retention efforts on departments with higher attrition rates, like Sales or Research & Development.
+
+## Visualizing Gender Distribution in the Company
+
+```{python}
+# Step 1: Calculate gender distribution in percentage
+gender_dist = HR_Analytics['Gender'].value_counts(normalize=True).reset_index()
+gender_dist.columns = ['Gender', 'Percentage']
+gender_dist['Percentage'] *= 100
+
+# Step 2: Create Pie Chart
+fig = px.pie(
+    gender_dist,
+    names='Gender',
+    values='Percentage',
+    #title='Gender Distribution (%)',
+    color_discrete_sequence=px.colors.qualitative.Pastel1,
+    hole=0.4  # for donut chart; remove for full pie
+)
+
+# Step 3: Customize layout
+fig.update_traces(
+    textposition='inside',
+    textinfo='percent+label',
+    pull=[0.05] * len(gender_dist),  # pulls slices slightly
+    marker=dict(line=dict(color='white', width=2))
+)
+
+fig.update_layout(
+    template="presentation",
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    width=500,
+    height=500
+)
+
+fig.show()
+
+# Step 4: Save chart in different formats
+results_dir = 'results'
+os.makedirs(results_dir, exist_ok=True)
+
+#fig.write_image(os.path.join(results_dir, 'gender_distribution_pie.jpg'))
+#fig.write_image(os.path.join(results_dir, 'gender_distribution_pie.png'))
+fig.write_html(os.path.join(results_dir, 'gender_distribution_pie.html'))
+```
+
+```{python}
+# Step 1: Create contingency table of Gender vs Attrition
+contingency_table = pd.crosstab(HR_Analytics['Gender'], HR_Analytics['Attrition'])
+
+print("Contingency Table:\n", contingency_table)
+
+# Step 2: Perform Chi-Square test of independence
+chi2, p_value, dof, expected = chi2_contingency(contingency_table)
+
+print(f"\nChi-Square Test Result:")
+print(f"Chi-square statistic: {chi2:.4f}")
+print(f"Degrees of freedom: {dof}")
+print(f"P-value: {p_value:.4f}")
+
+# Step 3: Significance interpretation
+alpha = 0.05
+if p_value < alpha:
+    print("Result: Reject the null hypothesis — Gender and Attrition are significantly associated.")
+else:
+    print("Result: Fail to reject the null hypothesis — No significant association between Gender and Attrition.")
+
+# Step 4: Cramér's V — Strength of association
+def cramers_v(chi2, n, shape):
+    return np.sqrt(chi2 / (n * (min(shape)-1)))
+
+n = contingency_table.to_numpy().sum()
+cramers_v_value = cramers_v(chi2, n, contingency_table.shape)
+
+print(f"\nCramér's V: {cramers_v_value:.4f}")
+
+# Step 5: Interpret Cramér's V
+if cramers_v_value < 0.10:
+    strength = "negligible"
+elif cramers_v_value < 0.30:
+    strength = "weak"
+elif cramers_v_value < 0.50:
+    strength = "moderate"
+else:
+    strength = "strong"
+
+print(f"Interpretation: The strength of the association between Gender and Attrition is {strength}.")
+```
+
+This analysis shows that there is no significant relationship between gender and attrition. The Chi-square test gave a p-value of 0.2928, which is higher than 0.05, meaning we cannot say gender affects whether employees leave or stay. Additionally, Cramér's V value is very low (0.0274), indicating the association between gender and attrition is negligible. In simple terms, gender does not meaningfully influence employee turnover in this data.
+
+
+- I would like to recommend that Gender doesn’t significantly affect attrition, so efforts to reduce turnover should focus else where like Job role and age group, but keep monitoring gender equity in different areas like in how they are both paying if they are equally and if they promote them equally.
+
+# Average Performance Rating by OverTime Status
+
+```{python}
+# Step 1: Calculate average performance rating per overtime status
+overtime_perf = HR_Analytics.groupby('OverTime')['PerformanceRating'].mean().reset_index()
+
+# Step 2: Calculate total for percentage (optional: to show % contribution)
+total_perf = overtime_perf['PerformanceRating'].sum()
+overtime_perf['percentage'] = round((overtime_perf['PerformanceRating'] / total_perf) * 100, 2)
+
+# Step 3: Create pie chart
+fig = px.pie(overtime_perf,
+             names='OverTime',
+             values='PerformanceRating',
+             #title='Average Performance Rating by OverTime Status',
+             color_discrete_sequence=px.colors.qualitative.Set2,
+             hole=0.4)  # donut style
+
+# Step 4: Styling
+fig.update_traces(
+    textinfo='percent+label',
+    pull=[0.05] * len(overtime_perf),
+    marker=dict(line=dict(color='white', width=2))
+)
+
+fig.update_layout(
+    template="presentation",
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    width=400,
+    height=400
+)
+
+# Step 5: Show and save
+fig.show()
+
+results_dir = 'results'
+os.makedirs(results_dir, exist_ok=True)
+
+#fig.write_image(os.path.join(results_dir, 'performance_by_overtime_pie.jpg'))
+#fig.write_image(os.path.join(results_dir, 'performance_by_overtime_pie.png'))
+fig.write_html(os.path.join(results_dir, 'performance_by_overtime_pie.html'))
+```
+
+```{python}
+from scipy.stats import shapiro
+# Step 1: Prepare data — extract performance rating for both OverTime groups
+yes_overtime = HR_Analytics[HR_Analytics['OverTime'] == 'Yes']['PerformanceRating']
+no_overtime = HR_Analytics[HR_Analytics['OverTime'] == 'No']['PerformanceRating']
+
+# Step 2: Test for normality using Shapiro-Wilk test (on both groups)
+print("Normality Test (Shapiro-Wilk):")
+stat_yes, p_yes = shapiro(yes_overtime)
+stat_no, p_no = shapiro(no_overtime)
+
+print(f"OverTime = Yes: stat = {stat_yes:.4f}, p = {p_yes:.4f}")
+print(f"OverTime = No : stat = {stat_no:.4f}, p = {p_no:.4f}")
+```
+
+Both p-values are less than 0.05, so performance ratings are not normally distributed in either group.
+
+- Let's use mannwhitneyu() non-parametric test for comparing two independent groups
+
+```{python}
+from scipy.stats import mannwhitneyu
+
+stat, p = mannwhitneyu(yes_overtime, no_overtime, alternative='two-sided')
+print(f"Mann-Whitney U test:\nStatistic = {stat:.4f}, p-value = {p:.4f}")
+
+if p < 0.05:
+    print(" Statistically significant difference in performance rating between OverTime groups.")
+else:
+    print(" No significant difference in performance rating between OverTime groups.")
+```
+
+This result means that there is no meaningful difference in performance ratings between employees who work overtime and those who do not.
+
+The p-value is 0.8506, which is much higher than the typical threshold of 0.05. This tells us that any small differences in performance are likely due to random chance, not because of overtime status.
+
+```{python}
+from scipy.stats import pointbiserialr
+# Step 4: Correlation between OverTime and PerformanceRating
+# OverTime is binary categorical → convert to numeric: Yes=1, No=0
+HR_Analytics['OverTime_Num'] = HR_Analytics['OverTime'].map({'Yes': 1, 'No': 0})
+
+# Use Point-Biserial Correlation (special case of Pearson for binary vs continuous)
+corr, p_corr = pointbiserialr(HR_Analytics['OverTime_Num'], HR_Analytics['PerformanceRating'])
+
+print(f"\nPoint-Biserial Correlation between OverTime and PerformanceRating:")
+print(f"Correlation = {corr:.4f}, p-value = {p_corr:.4f}")
+
+if p_corr < 0.05:
+    print(" There is a statistically significant correlation between OverTime and PerformanceRating.")
+else:
+    print(" No significant correlation between OverTime and PerformanceRating.")
+```
+
+- The point-biserial correlation result shows a correlation value of 0.0049 with a p-value of 0.8506, which means there is no significant relationship between working overtime and performance rating. The correlation is very close to zero, indicating that whether an employee works overtime or not has no meaningful impact on their performance rating in this dataset.
+
+- Recommendation
+
+Performance rating by overtime
+Working more hour doesn’t always mean better performance, so manage and reward people based on their results and growth not just their overtime.
+
+# Overall 
+
+Our data-driven approach has pinpointed where attrition risk is highest—among younger staff, sales roles, and certain departments. Instead of spreading resources thin, we recommend targeted strategies in these areas, while also refining performance evaluation and overtime practices to promote sustainable productivity and engagement.
+

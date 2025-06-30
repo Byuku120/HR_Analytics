@@ -1,0 +1,558 @@
+---
+title: HR_Analytics_Data_insights_slides.html
+author:
+  - name: "Josiane BYUKUSENGE"
+    affiliation: "Junior Data Analyst"
+
+date: "2025-06-28"
+format: 
+  html:
+    page-layout: full
+    self-contained: true
+    code-fold: true
+    code-tools: true
+    code-block-bg: true
+    code-block-border-left: "#31BAE9"
+    number-sections: true
+    number-tables: true
+    toc: true
+    toc-location: left
+    toc-title: Contents
+jupyter: python3
+---
+
+
+This notebook walks through the performing exploratory data analysis (EDA). The goal is to extract useful insights from key HR_Analytics metrics.
+
+
+### 📦 Importing Required Libraries
+
+- import pandas as pd  
+  This imports the pandas library, which is a powerful tool for data manipulation and analysis.  
+  The alias pd is commonly used for easier reference in code.
+
+- import os
+  This imports Python's built-in os module, which provides functions to interact with the operating system.  
+  It's useful for tasks like reading/writing files, navigating directories, and checking file paths.
+
+- import plotly.express as px  
+  This imports Plotly Express, a high-level interface for creating interactive plots and charts.  
+  The alias px lets you easily create visualizations like scatter plots, bar charts, and line graphs with minimal code.
+
+ - scipy.stats.chi2_contingency (from scipy.stats import chi2_contingency) is a statistical function used to perform the Chi-Square Test of Independence, helping determine whether there is a significant association between two categorical variables.scipy.stats.chi2_contingency (from scipy.stats import chi2_contingency) is a statistical function used to perform the Chi-Square Test of Independence, helping determine whether there is a significant association between two categorical variables.
+
+ - ttest_ind from scipy.stats is a statistical function used to perform an independent two-sample t-test, which compares the means of two independent groups to determine whether there is a statistically significant difference between them.
+
+ - numpy (import numpy as np) is a fundamental library for numerical computations in Python, offering fast and efficient operations on arrays and mathematical functions, and is often used to support statistical calculations such as effect sizes and standardized values.
+
+```{python}
+import pandas as pd
+import os
+import plotly.express as px
+from scipy.stats import chi2_contingency
+from scipy.stats import ttest_ind
+import numpy as np
+```
+
+```{python}
+#| Echo: false
+#get working directory
+current_dir = os.getcwd()
+
+# Go one directory up to the root directory
+project_root_dir = os.path.dirname(current_dir)
+
+#define paths to the data folders
+data_dir = os.path.join(project_root_dir,'data')
+raw_dir = os.path.join(data_dir,'raw')
+processed_dir = os.path.join(data_dir,'processed') 
+
+# define path results folder 
+results_dir = os.path.join(project_root_dir,'results')
+
+# define paths to docs folder
+docs_dir = os.path.join(project_root_dir,'docs')
+
+# Create directories if they do not exit
+os.makedirs(raw_dir, exist_ok = True) 
+os.makedirs(processed_dir, exist_ok = True) 
+os.makedirs(results_dir, exist_ok = True)
+os.makedirs(docs_dir, exist_ok = True)
+```
+
+::: {.panel-tabset}
+## Output {.active} 
+```{python}
+
+HR_Analytics= pd.read_csv('Cleaned1.csv')
+HR_Analytics.head()
+```
+## code
+```{python}
+#| output: false 
+HR_Analytics= pd.read_csv('Cleaned1.csv')
+```
+:::
+
+```{python}
+#| Echo: false
+#| output: false
+HR_Analytics.shape
+```
+
+```{python}
+#| Echo: false
+#| output: false
+HR_Analytics.info()
+```
+
+```{python}
+summary_HR = pd.DataFrame({
+    'Column': HR_Analytics.columns,
+    'Data Type': HR_Analytics.dtypes.values,
+    'Missing Values': HR_Analytics.isnull().sum().values
+})
+summary_HR
+```
+```{python}
+#| label: tbl-summary-numerical
+HR_Analytics.describe()
+```
+
+## Visualizing Attrition by Job Role
+
+```{python}
+#| Echo: false
+attrition_by_role = HR_Analytics.groupby(['JobRole', 'Attrition']).size().reset_index(name='count')
+total_per_role = attrition_by_role.groupby('JobRole')['count'].transform('sum')
+attrition_by_role['percentage'] = round((attrition_by_role['count'] / total_per_role) * 100, 2)
+
+# Plot
+fig = px.bar(attrition_by_role,
+             x='JobRole',
+             y='percentage',
+             color='Attrition',
+             title='Attrition by Job Role (%)',
+             color_discrete_sequence=px.colors.qualitative.Set2,  
+             barmode='group',
+             text='percentage',
+             width=900,
+             height=500)
+
+fig.update_layout(
+    template="presentation",
+    xaxis_title='Job Role',
+    yaxis_title='Attrition Percentage',
+    xaxis_tickangle=23,               
+    xaxis_tickfont=dict(size=11),     
+    legend_title=dict(text='Attrition'),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)"
+)
+
+fig.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+fig.show()
+
+# Save the chart
+#fig.write_image(os.path.join(results_dir, 'attrition_by_jobrole.jpg'))
+#fig.write_image(os.path.join(results_dir, 'attrition_by_jobrole.png'))
+fig.write_html(os.path.join(results_dir, 'attrition_by_jobrole.html'))
+```
+
+```{python}
+#| Echo: false
+# Create contingency table: JobRole x Attrition
+contingency_table = pd.crosstab(HR_Analytics['JobRole'], HR_Analytics['Attrition'])
+
+print("Contingency Table:\n", contingency_table)
+
+# Perform Chi-Square test
+chi2, p_value, dof, expected = chi2_contingency(contingency_table)
+
+print(f"\nChi-square statistic: {chi2:.4f}")
+print(f"Degrees of freedom: {dof}")
+print(f"P-value: {p_value:.4f}")
+
+# Significance level
+alpha = 0.05
+
+if p_value < alpha:
+    print("Result: Reject null hypothesis - Attrition is significantly associated with Job Role.")
+else:
+    print("Result: Fail to reject null hypothesis - No significant association between Attrition and Job Role.")
+
+# Calculate Cramér's V for effect size
+def cramers_v(chi2, n, dof, shape):
+    return np.sqrt(chi2 / (n * (min(shape) - 1)))
+
+n = contingency_table.values.sum()
+cramers_v_value = cramers_v(chi2, n, dof, contingency_table.shape)
+
+print(f"Cramér's V: {cramers_v_value:.4f}")
+
+print("\nInterpretation of Cramér's V:")
+print("0 to 0.1: Negligible association")
+print("0.1 to 0.3: Weak association")
+print("0.3 to 0.5: Moderate association")
+print(">0.5: Strong association")
+```
+
+The analysis of attrition by job role reveals noticeable differences in attrition rates across roles, particularly with higher attrition observed among Sales Representatives and Laboratory Technicians, while roles like Research Directors and Manufacturing Directors show significantly lower attrition. This pattern suggests that certain roles may be more prone to turnover due to factors like job stress, growth opportunities, or compensation mismatch. A Chi-square test confirms that there is a statistically significant association between Job Role and Attrition (p-value < 0.05), meaning attrition is not evenly distributed across job roles. However, the Cramér's V value, which quantifies the strength of this association, is in the weak range, indicating that while the relationship exists, it is not strongly predictive. 
+
+I would Recommend them that to Focus on  retention efforts on roles with high attrition like Sales Representatives and Lab Technicians by investigating root causes (according to job satisfaction, worklifeBalance, compensation) and tailoring interventions such as training, flexible work, or role-specific incentives. Additionally, incorporate role-specific retention KPIs into HR dashboards to track progress over time.
+
+## Visualizing Attrition by Age Group
+
+```{python}
+#| Echo: false
+attrition_by_age = HR_Analytics.groupby(['AgeGroup', 'Attrition']).size().reset_index(name='count')
+total_per_age = attrition_by_age.groupby('AgeGroup')['count'].transform('sum')
+attrition_by_age['percentage'] = round((attrition_by_age['count'] / total_per_age) * 100, 2)
+
+fig = px.bar(attrition_by_age,
+             x='AgeGroup',
+             y='percentage',
+             color='Attrition',
+             title='Attrition by Age Group (%)',
+             color_discrete_sequence=["#4dd0e1", "#00695c"],
+             barmode='group',
+             text='percentage',
+             width=700,
+             height=500)
+
+fig.update_layout(template="presentation",
+                  xaxis_title='Age Group',
+                  yaxis_title='Attrition Percentage',
+                  legend_title=dict(text='Attrition'),
+                  paper_bgcolor="rgba(0,0,0,0)",
+                  plot_bgcolor="rgba(0,0,0,0)")
+
+fig.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+fig.show()
+
+#fig.write_image(os.path.join(results_dir, 'attrition_by_age.jpg'))
+#fig.write_image(os.path.join(results_dir, 'attrition_by_age.png'))
+fig.write_html(os.path.join(results_dir, 'attrition_by_age.html'))
+```
+
+```{python}
+#| Echo: false
+# 1. Create contingency table of AgeGroup vs Attrition from HR_Analytics dataframe
+contingency_table = pd.crosstab(HR_Analytics['AgeGroup'], HR_Analytics['Attrition'])
+
+print("Contingency Table:\n", contingency_table)
+
+# 2. Perform Chi-Square test of independence
+chi2, p_value, dof, expected = chi2_contingency(contingency_table)
+
+print(f"\nChi-square statistic: {chi2:.4f}")
+print(f"Degrees of freedom: {dof}")
+print(f"P-value: {p_value:.4f}")
+
+# 3. Set significance level
+alpha = 0.05
+
+if p_value < alpha:
+    print("Result: Reject null hypothesis - There is a significant association between Age Group and Attrition.")
+else:
+    print("Result: Fail to reject null hypothesis - No significant association between Age Group and Attrition.")
+
+# 4. Calculate Cramér's V for strength of association
+def cramers_v(chi2, n, dof, table_shape):
+    return np.sqrt(chi2 / (n * (min(table_shape) - 1)))
+
+n = contingency_table.values.sum()
+cramers_v_value = cramers_v(chi2, n, dof, contingency_table.shape)
+
+print(f"Cramér's V: {cramers_v_value:.4f}")
+
+# Interpretation guide:
+print("\nInterpretation of Cramér's V:")
+print("0 to 0.1: Negligible association")
+print("0.1 to 0.3: Weak association")
+print("0.3 to 0.5: Moderate association")
+print(">0.5: Strong association")
+```
+
+The analysis of attrition by age group highlights a clear trend: younger employees (especially those in the 20–29 age group) have substantially higher attrition rates compared to older groups, whose attrition steadily decreases with age. This trend is statistically significant, as confirmed by the Chi-square test (p-value < 0.05), indicating that age group and attrition are not independent. However, the strength of this association, as measured by Cramér's V, falls into the weak range, meaning age is a relevant but not dominant factor. These results suggest that younger employees may be more likely to leave due to factors like job dissatisfaction, career exploration, or better opportunities elsewhere.
+
+
+I would like to recommend that to Focus on improving early-career engagement through mentorship programs, clearer career paths, and onboarding experiences tailored to Gen Z and younger Millennials. Retention strategies should be age-sensitive and include regular check-ins, rapid development opportunities, and flexible work options to meet evolving expectations of younger talent
+
+## Visualizing Attrition by Department
+
+```{python}
+#| Echo: false
+# Step 1: Group by Department and Attrition, and count
+dept_attrition = HR_Analytics.groupby(['Department', 'Attrition']).size().reset_index(name='count')
+
+# Step 2: Filter for only employees who left (Attrition == "Yes")
+attrition_yes = dept_attrition[dept_attrition['Attrition'] == 'Yes'].copy()
+
+# Step 3: Compute percentage of attrition by department
+total_attrition = attrition_yes['count'].sum()
+attrition_yes['percentage'] = round((attrition_yes['count'] / total_attrition) * 100, 2)
+
+# Step 4: Create pie chart
+fig = px.pie(attrition_yes,
+             names='Department',
+             values='percentage',
+             title='Attrition Distribution by Department (Only "Yes")',
+             color_discrete_sequence=px.colors.qualitative.Set3,
+             hole=0.4)  # donut-style
+
+# Step 5: Styling
+fig.update_traces(
+    textinfo='percent+label',
+    pull=[0.05] * len(attrition_yes),
+    marker=dict(line=dict(color='white', width=2))
+)
+
+fig.update_layout(
+    template="presentation",
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    width=800,
+    height=400
+)
+
+# Step 6: Show and save
+fig.show()
+
+results_dir = 'results'
+os.makedirs(results_dir, exist_ok=True)
+
+#fig.write_image(os.path.join(results_dir, 'attrition_by_department_pie.jpg'))
+#fig.write_image(os.path.join(results_dir, 'attrition_by_department_pie.png'))
+fig.write_html(os.path.join(results_dir, 'attrition_by_department_pie.html'))
+```
+
+```{python}
+#| Echo: false
+# Create a contingency table from the original HR_Analytics data
+contingency_table = pd.crosstab(HR_Analytics['Department'], HR_Analytics['Attrition'])
+
+print("Contingency Table:\n", contingency_table)
+
+# Perform Chi-Square test of independence
+chi2, p_value, dof, expected = chi2_contingency(contingency_table)
+
+print(f"\nChi-square statistic: {chi2:.4f}")
+print(f"Degrees of freedom: {dof}")
+print(f"P-value: {p_value:.4f}")
+
+# Significance level
+alpha = 0.05
+
+if p_value < alpha:
+    print("Result: Reject null hypothesis - Attrition is significantly associated with Department.")
+else:
+    print("Result: Fail to reject null hypothesis - No significant association between Attrition and Department.")
+
+# Calculate Cramér's V to measure strength of association
+def cramers_v(chi2, n, dof, shape):
+    return np.sqrt(chi2 / (n * (min(shape) - 1)))
+
+n = contingency_table.values.sum()
+cramers_v_value = cramers_v(chi2, n, dof, contingency_table.shape)
+
+print(f"Cramér's V: {cramers_v_value:.4f}")
+
+# Interpretation guide:
+print("\nInterpretation of Cramér's V:")
+print("0 to 0.1: Negligible association")
+print("0.1 to 0.3: Weak association")
+print("0.3 to 0.5: Moderate association")
+print(">0.5: Strong association")
+```
+
+The pie chart analysis of attrition by department shows that the Sales department accounts for the largest proportion of employee departures, followed by Research & Development, while Human Resources has the lowest share of attrition. This suggests that department-specific factors—such as workload, leadership style, or growth opportunities—may influence employee turnover. The Chi-square test confirms that attrition is significantly associated with department (p-value < 0.05), meaning the differences in attrition across departments are unlikely to be due to chance. However, the strength of this association, measured by Cramér's V, falls into the weak range, implying that while department is a factor in attrition, it is not a strong predictor on its own.
+
+I would like to recommend Prioritize deeper analysis within the Sales department to uncover specific drivers of turnover this could involve targeted surveys, exit interview reviews, or workload assessments. Additionally, consider implementing department-specific retention plans, especially in high-attrition areas, such as leadership coaching, sales incentives, or better career planning.
+
+## Visualizing Gender Distribution in the Company
+
+```{python}
+#| Echo: false
+# Step 1: Calculate gender distribution in percentage
+gender_dist = HR_Analytics['Gender'].value_counts(normalize=True).reset_index()
+gender_dist.columns = ['Gender', 'Percentage']
+gender_dist['Percentage'] *= 100
+
+# Step 2: Create Pie Chart
+fig = px.pie(
+    gender_dist,
+    names='Gender',
+    values='Percentage',
+    title='Gender Distribution (%)',
+    color_discrete_sequence=px.colors.qualitative.Pastel1,
+    hole=0.4  # for donut chart; remove for full pie
+)
+
+# Step 3: Customize layout
+fig.update_traces(
+    textposition='inside',
+    textinfo='percent+label',
+    pull=[0.05] * len(gender_dist),  # pulls slices slightly
+    marker=dict(line=dict(color='white', width=2))
+)
+
+fig.update_layout(
+    template="presentation",
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    width=500,
+    height=500
+)
+
+fig.show()
+
+# Step 4: Save chart in different formats
+results_dir = 'results'
+os.makedirs(results_dir, exist_ok=True)
+
+#fig.write_image(os.path.join(results_dir, 'gender_distribution_pie.jpg'))
+#fig.write_image(os.path.join(results_dir, 'gender_distribution_pie.png'))
+fig.write_html(os.path.join(results_dir, 'gender_distribution_pie.html'))
+```
+
+```{python}
+#| Echo: false
+# 1. Create contingency table of Gender vs Attrition
+contingency_table = pd.crosstab(HR_Analytics['Gender'], HR_Analytics['Attrition'])
+
+print("Contingency Table:\n", contingency_table)
+
+# 2. Perform Chi-Square test of independence
+chi2, p_value, dof, expected = chi2_contingency(contingency_table)
+
+print(f"\nChi-square statistic: {chi2:.4f}")
+print(f"Degrees of freedom: {dof}")
+print(f"P-value: {p_value:.4f}")
+
+# 3. Significance level
+alpha = 0.05
+
+if p_value < alpha:
+    print("Result: Reject null hypothesis - Gender and Attrition are significantly associated.")
+else:
+    print("Result: Fail to reject null hypothesis - No significant association between Gender and Attrition.")
+
+# 4. Calculate Cramér's V for strength of association
+def cramers_v(chi2, n, dof, shape):
+    return np.sqrt(chi2 / (n * (min(shape) - 1)))
+
+n = contingency_table.values.sum()
+cramers_v_value = cramers_v(chi2, n, dof, contingency_table.shape)
+
+print(f"Cramér's V: {cramers_v_value:.4f}")
+
+# Interpretation guide:
+print("\nInterpretation of Cramér's V:")
+print("0 to 0.1: Negligible association")
+print("0.1 to 0.3: Weak association")
+print("0.3 to 0.5: Moderate association")
+print(">0.5: Strong association")
+```
+
+The gender distribution chart shows a relatively balanced workforce, though there may be a slight dominance of one gender depending on the exact values in your dataset. To understand if gender influences employee attrition, a Chi-square test was conducted. The results show that there is no statistically significant association between Gender and Attrition (p-value > 0.05), meaning that attrition does not differ meaningfully between male and female employees. Furthermore, Cramér’s V confirms this with a value indicating a negligible association, reinforcing that gender is not a driving factor in attrition within this organization.
+
+I would like to recommend that Since gender does not significantly impact attrition, efforts to reduce turnover should focus on more influential factors (e.g., job role, age, department). However, continue to monitor gender-related metrics to ensure equity and inclusion in other areas such as promotions, compensation, and leadership development.
+
+# Average Performance Rating by OverTime Status
+
+```{python}
+#| Echo: false
+# Step 1: Calculate average performance rating per overtime status
+overtime_perf = HR_Analytics.groupby('OverTime')['PerformanceRating'].mean().reset_index()
+
+# Step 2: Calculate total for percentage (optional: to show % contribution)
+total_perf = overtime_perf['PerformanceRating'].sum()
+overtime_perf['percentage'] = round((overtime_perf['PerformanceRating'] / total_perf) * 100, 2)
+
+# Step 3: Create pie chart
+fig = px.pie(overtime_perf,
+             names='OverTime',
+             values='PerformanceRating',
+             title='Average Performance Rating by OverTime Status',
+             color_discrete_sequence=px.colors.qualitative.Set2,
+             hole=0.4)  # donut style
+
+# Step 4: Styling
+fig.update_traces(
+    textinfo='percent+label',
+    pull=[0.05] * len(overtime_perf),
+    marker=dict(line=dict(color='white', width=2))
+)
+
+fig.update_layout(
+    template="presentation",
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    width=700,
+    height=500
+)
+
+# Step 5: Show and save
+fig.show()
+
+results_dir = 'results'
+os.makedirs(results_dir, exist_ok=True)
+
+#fig.write_image(os.path.join(results_dir, 'performance_by_overtime_pie.jpg'))
+#fig.write_image(os.path.join(results_dir, 'performance_by_overtime_pie.png'))
+fig.write_html(os.path.join(results_dir, 'performance_by_overtime_pie.html'))
+```
+
+```{python}
+#| Echo: false
+# Separate performance ratings by OverTime status
+perf_overtime_yes = HR_Analytics.loc[HR_Analytics['OverTime'] == 'Yes', 'PerformanceRating']
+perf_overtime_no = HR_Analytics.loc[HR_Analytics['OverTime'] == 'No', 'PerformanceRating']
+
+# Perform independent t-test (assume unequal variances)
+t_stat, p_value = ttest_ind(perf_overtime_yes, perf_overtime_no, equal_var=False)
+
+print(f"T-test statistic: {t_stat:.4f}")
+print(f"P-value: {p_value:.4f}")
+
+# Significance level
+alpha = 0.05
+
+if p_value < alpha:
+    print("Result: Reject null hypothesis - Performance ratings differ significantly by OverTime status.")
+else:
+    print("Result: Fail to reject null hypothesis - No significant difference in Performance ratings by OverTime.")
+
+# Calculate Cohen's d for effect size
+mean_yes = np.mean(perf_overtime_yes)
+mean_no = np.mean(perf_overtime_no)
+std_yes = np.std(perf_overtime_yes, ddof=1)
+std_no = np.std(perf_overtime_no, ddof=1)
+n_yes = len(perf_overtime_yes)
+n_no = len(perf_overtime_no)
+
+# Pooled standard deviation
+pooled_std = np.sqrt(((n_yes -1)*std_yes**2 + (n_no -1)*std_no**2) / (n_yes + n_no - 2))
+
+cohen_d = (mean_yes - mean_no) / pooled_std
+
+print(f"Cohen's d (effect size): {cohen_d:.4f}")
+
+# Interpretation of Cohen's d:
+print("\nEffect size interpretation:")
+print("0.2 - small effect")
+print("0.5 - medium effect")
+print("0.8 - large effect")
+```
+
+The analysis of average performance ratings by overtime status reveals minimal visual differences between employees who work overtime and those who don’t. This observation is supported by the independent t-test, which shows no statistically significant difference in performance ratings between the two groups (p-value > 0.05). Additionally, the effect size (Cohen’s d) is small or negligible, indicating that even if a difference exists, it is practically insignificant. In other words, working overtime does not appear to impact performance ratings in a meaningful way.
+
+
+I would like to recommend that Rather than relying on overtime as a performance enhancer or evaluation indicator, performance management should emphasize qualitative feedback, goal alignment, and productivity metrics. It also opens up the opportunity to evaluate overtime practices—not to reward it blindly, but to manage it carefully, ensuring employee well-being and work-life balance are not compromised.
+
+# Overall 
+
+Our data-driven approach has pinpointed where attrition risk is highest—among younger staff, sales roles, and certain departments. Instead of spreading resources thin, we recommend targeted strategies in these areas, while also refining performance evaluation and overtime practices to promote sustainable productivity and engagement.
+
+
